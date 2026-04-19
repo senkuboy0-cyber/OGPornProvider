@@ -1,0 +1,8 @@
+{
+  "name": "OGPorn Provider",
+  "description": "OGPorn - Free Premium Porn Videos",
+  "manifestVersion": 1,
+  "pluginLists": [
+    "https://raw.githubusercontent.com/senkuboy0-cyber/OGPornProvider/builds/plugins.json"
+  ]
+}
