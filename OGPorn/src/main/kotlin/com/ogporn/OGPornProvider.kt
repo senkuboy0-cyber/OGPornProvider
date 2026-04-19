@@ -45,7 +45,7 @@ class OGPornProvider : MainAPI() {
             val title = a.attr("title").trim().ifBlank { return@mapNotNull null }
             // poster style attribute থেকে বের করো
             val style = a.attr("style")
-            val poster = Regex("""url\((?:&quot;|["'])?([^&"'\)\s]+)""").find(style)?.groupValues?.get(1)
+            val poster = Regex("""https://[^\s"'&)]+\.(?:webp|jpg|jpeg|png)""").find(style)?.value
             newMovieSearchResponse(title, href, TvType.Movie) { posterUrl = poster }
         } ?: emptyList()
 
