@@ -33,7 +33,6 @@ class OGPornProvider : MainAPI() {
         "$mainUrl/" to "Latest",
     )
 
-
     override suspend fun getMainPage(page: Int, request: MainPageRequest): HomePageResponse {
         val url = if (page == 1) request.data else request.data.trimEnd('/') + "/page/$page/"
         val doc = app.get(url, headers = ua).document
