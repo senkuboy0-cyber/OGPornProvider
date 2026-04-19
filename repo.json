@@ -1,17 +1,8 @@
-# Repo.json for CloudStream3
 {
-  "name": "OGPorn",
-  "repository": "https://github.com/senkuboy0-cyber/OGPornProvider",
-  "provider": "com.ogporn.OGPornProvider",
-  "enabled": true,
-  "api": "CloudStream",
-  "language": "en",
-  "version": "1.0.0",
+  "name": "OGPorn Provider",
   "description": "OGPorn - Free Premium Porn Videos",
-  "author": "senkuboy0-cyber",
-  "module": "OGPorn",
-  "minAds": "0",
-  "showsNativeAds": false,
-  "locked": false,
-  "categories": ["Movie", "Others"]
+  "manifestVersion": 1,
+  "pluginLists": [
+    "https://raw.githubusercontent.com/senkuboy0-cyber/OGPornProvider/builds/plugins.json"
+  ]
 }
