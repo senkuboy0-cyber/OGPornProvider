@@ -15,48 +15,53 @@ class OGPornProvider : MainAPI() {
     )
 
     override val mainPage = mainPageOf(
-        "$mainUrl/category/stepsister/" to "StepSister",
-        "$mainUrl/category/teen/" to "Teen",
-        "$mainUrl/category/threesome/" to "Threesome",
-        "$mainUrl/category/stepmom/" to "StepMom",
-        "$mainUrl/category/stepdaughter/" to "StepDaughter",
-        "$mainUrl/category/sneaky/" to "Sneaky",
-        "$mainUrl/category/milf/" to "MILF",
-        "$mainUrl/category/foursome/" to "Foursome",
-        "$mainUrl/category/cheating/" to "Cheating",
-        "$mainUrl/category/swap/" to "Swap",
-        "$mainUrl/category/freeuse/" to "Freeuse",
-        "$mainUrl/category/public/" to "Public",
-        "$mainUrl/category/asian/" to "Asian",
-        "$mainUrl/category/hijab/" to "Hijab",
-        "$mainUrl/category/grandparent/" to "Grandparent",
+        "$mainUrl/brother-sister/" to "StepSister",
+        "$mainUrl/teen/" to "Teen",
+        "$mainUrl/threesome/" to "Threesome",
+        "$mainUrl/stepmom/" to "StepMom",
+        "$mainUrl/stepdaughter/" to "StepDaughter",
+        "$mainUrl/sneaky/" to "Sneaky",
+        "$mainUrl/milf/" to "MILF",
+        "$mainUrl/foursome/" to "Foursome",
+        "$mainUrl/cheating/" to "Cheating",
+        "$mainUrl/swap/" to "Swap",
+        "$mainUrl/freeuse/" to "Freeuse",
+        "$mainUrl/public/" to "Public",
+        "$mainUrl/asian/" to "Asian",
+        "$mainUrl/hijab/" to "Hijab",
+        "$mainUrl/grandparent/" to "Grandparent",
         "$mainUrl/" to "Latest",
     )
 
     override suspend fun getMainPage(page: Int, request: MainPageRequest): HomePageResponse {
-        val url = if (page == 1) request.data else request.data.trimEnd('/') + "/page/$page/"
+        val url = if (page == 1) request.data
+                  else request.data.trimEnd('/') + "/page/$page/"
         val doc = app.get(url, headers = ua).document
-        val items = doc.select("article.post, div.post-item, .video-card").mapNotNull { el ->
-            val a = el.selectFirst("a[href]") ?: return@mapNotNull null
+
+        // শেষ .videos div এ actual video links থাকে
+        val videoSection = doc.select(".videos").last()
+        val items = videoSection?.select("a.video")?.mapNotNull { a ->
             val href = a.attr("abs:href").ifBlank { return@mapNotNull null }
-            if (!href.contains(mainUrl)) return@mapNotNull null
-            val title = (el.selectFirst("h2, h3, .title, .post-title")?.text() ?: a.attr("title")).trim().ifBlank { return@mapNotNull null }
-            val poster = el.selectFirst("img")?.let { it.attr("data-src").ifBlank { it.attr("src") } }
-            if (poster.isNullOrBlank()) return@mapNotNull null
-            newMovieSearchResponse(title, href, TvType.Movie) { this.posterUrl = poster }
-        }
+            val title = a.attr("title").trim().ifBlank { return@mapNotNull null }
+            // poster style attribute থেকে বের করো
+            val style = a.attr("style")
+            val poster = Regex("""url\(['"]?([^'")\s]+)['"]?\)""").find(style)?.groupValues?.get(1)
+            newMovieSearchResponse(title, href, TvType.Movie) { posterUrl = poster }
+        } ?: emptyList()
+
         return newHomePageResponse(request.name, items, page < 10)
     }
 
     override suspend fun search(query: String): List<SearchResponse> {
         val doc = app.get("$mainUrl/?s=${java.net.URLEncoder.encode(query, "UTF-8")}", headers = ua).document
-        return doc.select("article.post").mapNotNull { el ->
-            val a = el.selectFirst("a[href]") ?: return@mapNotNull null
+        val videoSection = doc.select(".videos").last()
+        return videoSection?.select("a.video")?.mapNotNull { a ->
             val href = a.attr("abs:href").ifBlank { return@mapNotNull null }
-            val title = (el.selectFirst("h2, h3")?.text() ?: a.attr("title")).trim().ifBlank { return@mapNotNull null }
-            val poster = el.selectFirst("img")?.let { it.attr("data-src").ifBlank { it.attr("src") } }
-            newMovieSearchResponse(title, href, TvType.Movie) { this.posterUrl = poster }
-        }
+            val title = a.attr("title").trim().ifBlank { return@mapNotNull null }
+            val style = a.attr("style")
+            val poster = Regex("""url\(['"]?([^'")\s]+)['"]?\)""").find(style)?.groupValues?.get(1)
+            newMovieSearchResponse(title, href, TvType.Movie) { posterUrl = poster }
+        } ?: emptyList()
     }
 
     override suspend fun load(url: String): LoadResponse {
@@ -64,33 +69,43 @@ class OGPornProvider : MainAPI() {
         val title = doc.selectFirst("h1, .entry-title")?.text()?.trim() ?: doc.title().trim()
         val poster = doc.selectFirst("meta[property=og:image]")?.attr("content")
         val description = doc.selectFirst("meta[property=og:description]")?.attr("content")
-        var videoUrl = ""
-        val videoSource = doc.selectFirst("video.xplayer-video source")
-        if (videoSource != null) videoUrl = videoSource.attr("src")
-        if (videoUrl.isBlank()) {
-            val pageHtml = doc.html()
-            val videoMatch = Regex("""og\.vcdn\.cc/[^\s\"'>]+\.mp4""").find(pageHtml)
-            videoUrl = videoMatch?.value ?: ""
-        }
-        val tags = doc.select(".taxonomy a, .cat, .ogp-tag").map { it.text().trim() }.filter { it.isNotBlank() }
-        return newMovieLoadResponse(title, url, TvType.Movie, videoUrl) {
+
+        // source[type=video/mp4] থেকে URL নাও
+        val videoUrl = doc.selectFirst("video.xplayer-video source[type*=mp4]")
+            ?.attr("src")?.trim() ?: ""
+
+        return newMovieLoadResponse(title, url, TvType.Movie, videoUrl.ifBlank { url }) {
             this.posterUrl = poster
             this.plot = description
-            this.tags = tags
         }
     }
 
-    override suspend fun loadLinks(data: String, isCasting: Boolean, subtitleCallback: (SubtitleFile) -> Unit, callback: (ExtractorLink) -> Unit): Boolean {
-        if (data.isBlank() || !data.startsWith("http")) return false
-        val quality = when {
-            data.contains("1080") -> Qualities.P1080.value
-            data.contains("720") -> Qualities.P720.value
-            data.contains("480") -> Qualities.P480.value
-            else -> Qualities.Unknown.value
+    override suspend fun loadLinks(
+        data: String,
+        isCasting: Boolean,
+        subtitleCallback: (SubtitleFile) -> Unit,
+        callback: (ExtractorLink) -> Unit
+    ): Boolean {
+        if (data.isBlank()) return false
+
+        if (data.contains("vcdn.cc") || data.contains(".mp4")) {
+            callback(newExtractorLink(name, name, data, ExtractorLinkType.VIDEO) {
+                this.quality = Qualities.Unknown.value
+                this.referer = mainUrl
+                this.headers = ua
+            })
+            return true
         }
-        callback(newExtractorLink(name, "$name [HD]", data, ExtractorLinkType.VIDEO) {
-            this.quality = quality
-            this.headers = ua + mapOf("Referer" to mainUrl)
+
+        // data page URL হলে page থেকে video URL বের করো
+        val doc = app.get(data, headers = ua).document
+        val videoUrl = doc.selectFirst("video.xplayer-video source[type*=mp4]")
+            ?.attr("src")?.trim() ?: return false
+
+        callback(newExtractorLink(name, name, videoUrl, ExtractorLinkType.VIDEO) {
+            this.quality = Qualities.Unknown.value
+            this.referer = mainUrl
+            this.headers = ua
         })
         return true
     }
