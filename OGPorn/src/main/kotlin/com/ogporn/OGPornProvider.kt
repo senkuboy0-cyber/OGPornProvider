@@ -45,7 +45,7 @@ class OGPornProvider : MainAPI() {
             val title = a.attr("title").trim().ifBlank { return@mapNotNull null }
             // poster style attribute থেকে বের করো
             val style = a.attr("style")
-            val poster = Regex("""url\(['"]?([^'")\s]+)['"]?\)""").find(style)?.groupValues?.get(1)
+            val poster = Regex("""url\((?:&quot;|["'])?([^&"'\)\s]+)""").find(style)?.groupValues?.get(1)
             newMovieSearchResponse(title, href, TvType.Movie) { posterUrl = poster }
         } ?: emptyList()
 
@@ -70,9 +70,11 @@ class OGPornProvider : MainAPI() {
         val poster = doc.selectFirst("meta[property=og:image]")?.attr("content")
         val description = doc.selectFirst("meta[property=og:description]")?.attr("content")
 
-        // source[type=video/mp4] থেকে URL নাও
-        val videoUrl = doc.selectFirst("video.xplayer-video source[type*=mp4]")
-            ?.attr("src")?.trim() ?: ""
+        // Raw HTML থেকে vcdn URL বের করো
+        val html = doc.html()
+        val videoUrl = Regex("""<source src="(https://og\.vcdn\.cc/[^"]+)" type="video/mp4"""")
+            .find(html)?.groupValues?.get(1)
+            ?.replace("&amp;", "&") ?: ""
 
         return newMovieLoadResponse(title, url, TvType.Movie, videoUrl.ifBlank { url }) {
             this.posterUrl = poster
@@ -97,10 +99,10 @@ class OGPornProvider : MainAPI() {
             return true
         }
 
-        // data page URL হলে page থেকে video URL বের করো
-        val doc = app.get(data, headers = ua).document
-        val videoUrl = doc.selectFirst("video.xplayer-video source[type*=mp4]")
-            ?.attr("src")?.trim() ?: return false
+        val html = app.get(data, headers = ua).document.html()
+        val videoUrl = Regex("""<source src="(https://og\.vcdn\.cc/[^"]+)" type="video/mp4"""")
+            .find(html)?.groupValues?.get(1)
+            ?.replace("&amp;", "&") ?: return false
 
         callback(newExtractorLink(name, name, videoUrl, ExtractorLinkType.VIDEO) {
             this.quality = Qualities.Unknown.value
@@ -109,4 +111,4 @@ class OGPornProvider : MainAPI() {
         })
         return true
     }
-}
+                             }
